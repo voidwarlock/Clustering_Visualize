@@ -1,5 +1,6 @@
 #include "coordinatetwidget.h"
 #include <QPainter>
+#include <QPalette>
 #include <QMouseEvent>
 #include <algorithm>
 #include <iostream>
@@ -8,6 +9,11 @@
 
 CoordinateWidget::CoordinateWidget(QWidget *parent)
     : QWidget(parent), prob_window(nullptr), tree_window(nullptr){
+       
+    QPalette palette = this->palette();
+    palette.setColor(QPalette::Window, Qt::white);
+    this->setAutoFillBackground(true);
+    this->setPalette(palette);
         // 创建滑动条
     scaleSlider = new QSlider(Qt::Horizontal, this);
     scaleSlider->setMinimum(20);
