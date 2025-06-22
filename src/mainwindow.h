@@ -13,6 +13,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QCheckBox>
+#include <QLabel>
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -45,6 +46,7 @@ private:
     QLineEdit *selectedAlgorithmLineEdit;
     QMenu *menu;
     QSlider* speedSlider;
+    QLabel *waitingLabel;
     QFont buttonFont;  // 所有按钮用的字体
     QFont lineEditFont; // 所有 QLineEdit 用的字体（可选
 
@@ -75,6 +77,7 @@ private:
 
     bool isRunning;
     std::atomic<bool> shouldStopAnimation;
+    std::atomic<bool> shouldStopClustering;  // 外部控制聚类中断
     std::atomic<bool> isWindowClosing;
     std::atomic<int> animationDelay{500};
 };

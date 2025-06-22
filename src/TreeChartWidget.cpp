@@ -40,6 +40,8 @@ void TreeChartWidget::paintEvent(QPaintEvent*) {
     if (roots_.empty()) {
         return; // Nothing to draw
     }
+
+    painter.fillRect(rect(), Qt::white);
     
     int chartHeight = max_height * PERHEIGHT;
     int chartWidth = PERWIDTH * (points_.size() + 30);

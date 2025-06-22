@@ -123,7 +123,7 @@ public:
         //std::cout<<L<<std::endl;
         Eigen::MatrixXd U = getEigen(L);
 //
-        K_Means k_means = K_Means(K, U);
+        K_Means k_means = K_Means(K, U, 30, 1e-4);
         k_means.start();
 //
         labels = k_means.labels;

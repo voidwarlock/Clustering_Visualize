@@ -6,6 +6,7 @@
 #include <QMetaObject>
 #include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QApplication>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), buttonFont("Arial", 10), lineEditFont("Arial", 12){
@@ -94,7 +95,14 @@ MainWindow::MainWindow(QWidget *parent)
 
     buttonLayout->addLayout(thirdRowLayout);
 
-/////
+    // 创建等待提示标签
+    waitingLabel = new QLabel("\n\n\n\n\n\n\nOperating cluster, please wait...", this);
+    waitingLabel->setStyleSheet("color: red; font-size: 20px;");
+    waitingLabel->hide();  // 默认隐藏
+
+    // 将这个容器加入 buttonLayout
+    buttonLayout->addWidget(waitingLabel);
+
     buttonLayout->addStretch();
 
     connect(clearButton, &QPushButton::clicked, this, &MainWindow::onClearClicked);
@@ -129,7 +137,13 @@ void MainWindow::onClearClicked() {
     coordinateWidget->setPoint_features(std::vector<Pointtype>(), 0.0);
     coordinateWidget->setLabels(std::vector<int>()); // 清空
     coordinateWidget->setFlags(false);
+    coordinateWidget->update();
     shouldStopAnimation = true;
+    if (onecluster!=nullptr){
+        delete onecluster;
+        onecluster = nullptr;
+    }
+    
     
     if (parameterLayout) {
         // 先移除布局中的所有控件
@@ -170,7 +184,6 @@ void MainWindow::onClearClicked() {
         delete applyButton;
         applyButton = nullptr;
     }
-    
     if (auxButton) {
         buttonLayout->removeWidget(auxButton);
         delete auxButton;
@@ -193,7 +206,7 @@ void MainWindow::onClearClicked() {
 
 void MainWindow::handlePointsChanged(const QList<QPointF> &points) {
     localPoints = points; // 主窗口保存一份副本
-    qDebug() << "当前点数量：" << points.size();
+    qDebug() << "The amounts of current spots: " << points.size();
 }
 
 void MainWindow::onLoadButton_clicked()
@@ -217,7 +230,10 @@ void MainWindow::onLoadButton_clicked()
                 coordinateWidget->setLabels(std::vector<int>(points.size(), -1)); // 清空
                 coordinateWidget->setFlags(false);
                 coordinateWidget->update();
-                delete onecluster;
+                if (onecluster!=nullptr){
+                    delete onecluster;
+                    onecluster = nullptr;
+                }
                 Eigen::MatrixXd datas = fromQPointListToEigen(points);
                 onecluster = new ALLCluster(datas, param);
             } else {
@@ -236,12 +252,12 @@ void MainWindow::onscaleButton_clicked() {
     double scaleFactor = numberscale->text().toDouble(&ok);
 
     if (!ok || scaleFactor <= 0) {
-        QMessageBox::warning(this, "错误", "请输入有效的正数作为缩放比例");
+        QMessageBox::warning(this, "error", "Please enter a valid positive number as the scaling ratio.");
         return;
     }
 
     if (localPoints.isEmpty()) {
-        QMessageBox::information(this, "提示", "当前没有可缩放的数据点");
+        QMessageBox::information(this, "Notice", "There are currently no data points to scale.");
         return;
     }
 
@@ -520,6 +536,8 @@ void MainWindow::applyButtonClicked() {
     param.clustertype = clustertype;
     coordinateWidget->setFlags(false);
     shouldStopAnimation = true;
+    waitingLabel->show();
+    QApplication::processEvents();
 
     // K_Means 参数
     if (kValueLineEdit && !kValueLineEdit->text().isEmpty()) {
@@ -580,7 +598,7 @@ void MainWindow::applyButtonClicked() {
         if (inside_right) qDebug() << "Preference Value:" << param.preference;
         else {
             param.preference = MEDIAN;
-            qDebug() << "Invalid Preference value";
+            qDebug() << "Invalid Preference value, use MEDIAN";
         }
     }else{
         param.preference = MEDIAN;
@@ -642,21 +660,26 @@ void MainWindow::applyButtonClicked() {
         if(datas.rows()>0){
             onecluster->setDatas(datas);
             onecluster->setParams(param);
-            onecluster->start();
+            onecluster->start();  
             coordinateWidget->setLabels(onecluster->labels);
         }
     }
-
+    waitingLabel->hide();
     qDebug() << "============================";
 }
 
 
 void MainWindow::auxButtonClicked() {
-    coordinateWidget->setFlags(true);
-    coordinateWidget->setCenters(onecluster->centers);
-    coordinateWidget->setPoint_features(onecluster->point_features, param.eps);
-    coordinateWidget->setProbs(onecluster->probs);
-    coordinateWidget->setRoots(onecluster->roots, param.nClusters);
+    if (onecluster) {  // 先判断 onecluster 是否为空指针
+        coordinateWidget->setFlags(true);
+        coordinateWidget->setCenters(onecluster->centers);
+        coordinateWidget->setPoint_features(onecluster->point_features, param.eps);
+        coordinateWidget->setProbs(onecluster->probs);
+        coordinateWidget->setRoots(onecluster->roots, param.nClusters);
+    } else {
+        // 可选：处理 onecluster 不存在的情况，比如提示用户加载数据
+        qDebug() << "Error: onecluster is null. Please load cluster data first.";
+    }
 }
 
 
@@ -667,36 +690,41 @@ void MainWindow::displayButtonClicked() {
         shouldStopAnimation = false;
 
         QThreadPool::globalInstance()->start([this]() {
-            for (int i = 0; i < onecluster->label_history.size(); ++i) {
-                if (isWindowClosing.load()) break;
-                if (shouldStopAnimation.load()) break;
-                if (!coordinateWidget) continue;
+            if (onecluster){
+                for (int i = 0; i < onecluster->label_history.size(); ++i) {
+                    if (isWindowClosing.load()) break;
+                    if (shouldStopAnimation.load()) break;
+                    if (!coordinateWidget) continue;
+                    
 
-                QMetaObject::invokeMethod(coordinateWidget, "setLabels", Qt::QueuedConnection,
-                                          Q_ARG(std::vector<int>, onecluster->label_history[i]));
+                    QMetaObject::invokeMethod(coordinateWidget, "setLabels", Qt::QueuedConnection,
+                                            Q_ARG(std::vector<int>, onecluster->label_history[i]));
 
-                if (onecluster->center_history.size() == onecluster->label_history.size()) {
-                    QMetaObject::invokeMethod(coordinateWidget, "setCenters", Qt::QueuedConnection,
-                                              Q_ARG(std::vector<std::vector<double>>, onecluster->center_history[i]));
+                    if (onecluster->center_history.size() == onecluster->label_history.size()) {
+                        QMetaObject::invokeMethod(coordinateWidget, "setCenters", Qt::QueuedConnection,
+                                                Q_ARG(std::vector<std::vector<double>>, onecluster->center_history[i]));
+                    }
+                    if (onecluster->point_feature_history.size() == onecluster->label_history.size()) {
+                        QMetaObject::invokeMethod(coordinateWidget, "setPoint_features", Qt::QueuedConnection,
+                                                Q_ARG(std::vector<Pointtype>, onecluster->point_feature_history[i]),
+                                                Q_ARG(double, param.eps));
+                    }
+                    if (onecluster->prob_history.size() == onecluster->label_history.size()) {
+                        QMetaObject::invokeMethod(coordinateWidget, "setProbs", Qt::QueuedConnection,
+                                                Q_ARG(std::vector<double>, onecluster->prob_history[i]));
+                    }
+                    if (onecluster->root_history.size() == onecluster->label_history.size() && onecluster->num_history.size() == onecluster->label_history.size()) {
+                        QMetaObject::invokeMethod(coordinateWidget, "setRoots", Qt::QueuedConnection,
+                                                Q_ARG(std::vector<ClusterNode*>, onecluster->root_history[i]),
+                                                Q_ARG(int, onecluster->num_history[i]));
+                    }
+                    QThread::msleep(animationDelay.load());
+                    QCoreApplication::processEvents();
                 }
-                if (onecluster->point_feature_history.size() == onecluster->label_history.size()) {
-                    QMetaObject::invokeMethod(coordinateWidget, "setPoint_features", Qt::QueuedConnection,
-                                              Q_ARG(std::vector<Pointtype>, onecluster->point_feature_history[i]),
-                                              Q_ARG(double, param.eps));
-                }
-                if (onecluster->prob_history.size() == onecluster->label_history.size()) {
-                    QMetaObject::invokeMethod(coordinateWidget, "setProbs", Qt::QueuedConnection,
-                                              Q_ARG(std::vector<double>, onecluster->prob_history[i]));
-                }
-                if (onecluster->root_history.size() == onecluster->label_history.size() && onecluster->num_history.size() == onecluster->label_history.size()) {
-                    QMetaObject::invokeMethod(coordinateWidget, "setRoots", Qt::QueuedConnection,
-                                              Q_ARG(std::vector<ClusterNode*>, onecluster->root_history[i]),
-                                              Q_ARG(int, onecluster->num_history[i]));
-                }
-                QThread::msleep(animationDelay.load());
-                QCoreApplication::processEvents();
             }
-
+            else{
+                qDebug() << "Error: onecluster is null. Please load cluster data first.";
+            }
             // 回到主线程更新状态
             QMetaObject::invokeMethod(this, [this]() {
                 isRunning = false; 
