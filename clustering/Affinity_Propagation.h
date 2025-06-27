@@ -3,53 +3,71 @@
 
 #include <iostream>
 #include <vector>
-#include <Eigen/Dense>
+#include <Eigen/Dense>           // Eigen库用于矩阵和向量运算
 #include <Eigen/StdVector>
-#include <algorithm> // for std::random_shuffle or std::shuffle
-#include <random>    // for std::default_random_engine
+#include <algorithm>            // 提供排序、随机打乱等功能
+#include <random>               // 用于更安全的随机数生成器
 
-
+// 定义一个特殊值表示使用中位数作为Preference（偏好值）
 #define MEDIAN -114514
 
-
-class AffinityPropagation{
+class AffinityPropagation {
 private:
-    double Damping;
-    double Tol;
-    double Preference;
-    int Maxiter;
-    Eigen::MatrixXd X;
-    Eigen::MatrixXd Responsibility;
-    Eigen::MatrixXd Availability;
-    Eigen::MatrixXd new_Responsibility;
-    Eigen::MatrixXd new_Availability;
+    double Damping;              // 阻尼系数，防止震荡，取值在[0.5, 1)之间
+    double Tol;                  // 收敛阈值，当责任和可用性变化小于该值时停止迭代
+    double Preference;           // 偏好值，决定聚类中心数量的先验，默认为MEDIAN
+    int Maxiter;                 // 最大迭代次数
+    Eigen::MatrixXd X;           // 输入数据矩阵，每一行是一个样本点
+    Eigen::MatrixXd Responsibility;     // 责任矩阵（responsibility matrix）
+    Eigen::MatrixXd Availability;       // 可用性矩阵（availability matrix）
+    Eigen::MatrixXd new_Responsibility; // 本次迭代更新后的责任矩阵
+    Eigen::MatrixXd new_Availability;   // 本次迭代更新后的可用性矩阵
 
 public:
-    std::vector<int> indexcenters;
-    std::vector<std::vector<std::vector<double>>> center_history;
-    std::vector<std::vector<double>> centers;
-    std::vector<int> labels;
-    std::vector<std::vector<int>> label_history;
-    AffinityPropagation(double damping, double tol, Eigen::MatrixXd x, double preference = MEDIAN, int maxiter = 1000) : Damping(damping), Tol(tol), X(x), Preference(preference), Maxiter(maxiter){
+    std::vector<int> indexcenters;      // 聚类中心的索引列表
+    std::vector<std::vector<std::vector<double>>> center_history; // 每次迭代后中心的历史记录
+    std::vector<std::vector<double>> centers;  // 当前确定的聚类中心坐标
+    std::vector<int> labels;            // 每个样本点的聚类标签
+    std::vector<std::vector<int>> label_history; // 标签历史记录，用于可视化或调试
+
+    /**
+     * 构造函数
+     * @param damping 阻尼系数
+     * @param tol 收敛阈值
+     * @param x 数据集（每行一个样本）
+     * @param preference 偏好值，默认为MEDIAN
+     * @param maxiter 最大迭代次数，默认1000
+     */
+    AffinityPropagation(double damping, double tol, Eigen::MatrixXd x, double preference = MEDIAN, int maxiter = 1000)
+        : Damping(damping), Tol(tol), X(x), Preference(preference), Maxiter(maxiter) {
+        // 初始化责任矩阵和可用性矩阵为零矩阵
         Responsibility = Eigen::MatrixXd::Zero(X.rows(), X.rows());
         Availability = Eigen::MatrixXd::Zero(X.rows(), X.rows());
         new_Responsibility = Eigen::MatrixXd::Zero(X.rows(), X.rows());
         new_Availability = Eigen::MatrixXd::Zero(X.rows(), X.rows());
     }
 
+    /**
+     * 计算相似度矩阵（负欧氏距离平方）
+     * @return 相似度矩阵 S，S(i,j) 表示点j对点i的吸引力
+     */
     Eigen::MatrixXd distance() {
-        Eigen::VectorXd row_norms = X.rowwise().squaredNorm();
-        Eigen::MatrixXd dot_products = X * X.transpose();
-        Eigen::MatrixXd dists = (-2 * dot_products).rowwise() + row_norms.transpose();
+        Eigen::VectorXd row_norms = X.rowwise().squaredNorm(); // 每行的平方范数
+        Eigen::MatrixXd dot_products = X * X.transpose();     // 内积矩阵
+        Eigen::MatrixXd dists = (-2 * dot_products).rowwise() + row_norms.transpose(); // 距离计算
         dists = dists.colwise() + row_norms;
-        return -dists;
+        return -dists; // 返回负距离作为相似度
     }
 
+    /**
+     * 将相似度矩阵的对角线设置为非对角元素的中位数
+     * @param similarity 相似度矩阵
+     */
     void setPreferenceToMedian(Eigen::MatrixXd& similarity) {
         int n = similarity.rows();
         Eigen::VectorXd off_diag(n * (n - 1));
 
-        // 快速提取所有非对角线元素
+        // 提取所有非对角线元素
         int idx = 0;
         for (int i = 0; i < n; ++i) {
             double* row_data = similarity.row(i).data();
@@ -68,19 +86,28 @@ public:
         similarity.diagonal().setConstant(median);
     }
 
+    /**
+     * 设置偏好值到相似度矩阵的对角线上
+     * @param similarity 相似度矩阵
+     */
     void setPreference(Eigen::MatrixXd& similarity) {
         similarity.diagonal().setConstant(Preference);
     }
 
+    /**
+     * 更新责任矩阵 R(i,k) = s(i,k) - max_{k'≠k} [s(i,k') + a(i,k')]
+     * @param similarity 相似度矩阵
+     */
     void new_res(Eigen::MatrixXd& similarity) {
         Eigen::MatrixXd S_plus_A = similarity + Availability;
+
         #pragma omp parallel for
         for (int i = 0; i < S_plus_A.rows(); ++i) {
             Eigen::VectorXd row = S_plus_A.row(i);
-            
+
             for (int k = 0; k < S_plus_A.cols(); ++k) {
                 double temp = row(k);
-                row(k) = -1e9;
+                row(k) = -1e9; // 屏蔽当前k'
                 double max_val = row.maxCoeff();
                 new_Responsibility(i, k) = similarity(i, k) - max_val;
                 row(k) = temp;  
@@ -88,38 +115,45 @@ public:
         }
     }
 
+    /**
+     * 更新可用性矩阵：
+     * a(i,k) = min(0, r(k,k) + sum_{i'≠k,i'} max(0, r(i',k)))
+     */
     void new_avai() {
         int n = Responsibility.rows();
         new_Availability = Eigen::MatrixXd::Zero(n, n);
 
-        Eigen::MatrixXd posResponsibility = Responsibility.array().max(0.0);
-        Eigen::VectorXd diag_sums = posResponsibility.colwise().sum();
+        Eigen::MatrixXd posResponsibility = Responsibility.array().max(0.0); // 所有r(i,k)取max(0, r(i,k))
+        Eigen::VectorXd diag_sums = posResponsibility.colwise().sum(); // 每列总和
 
-        // 修正：计算sum_{i'≠k} max(0, R(i',k))
+        // 减去每个k对应的r(k,k)，得到除k外的其他点贡献的总和
         for (int k = 0; k < n; ++k) {
             diag_sums(k) -= std::max(0.0, Responsibility(k, k));
         }
 
         new_Availability.diagonal() = diag_sums;
+
         #pragma omp parallel for
         for (int i = 0; i < n; ++i) {
             for (int k = 0; k < n; ++k) {
                 if (i == k) continue;
-                // 修正：sum_pos 应为 diag_sums(k) - max(0, R(i,k))
                 double sum_pos = diag_sums(k) - posResponsibility(i, k);
                 new_Availability(i, k) = std::min(0.0, Responsibility(k, k) + sum_pos);
             }
         }
-
     }
+
+    /**
+     * 主循环：迭代更新责任和可用性矩阵直到收敛
+     * @param similarity 相似度矩阵
+     */
     void update(Eigen::MatrixXd similarity){
         int i = 0;
         while(i < Maxiter){
             new_res(similarity);
             double r_diff = (new_Responsibility - Responsibility).array().abs().maxCoeff();
             Responsibility = Damping * Responsibility + (1 - Damping) * new_Responsibility;
-            
-            
+
             new_avai();
             double a_diff = (new_Availability - Availability).array().abs().maxCoeff();
             Availability = Damping * Availability + (1 - Damping) * new_Availability;
@@ -127,6 +161,8 @@ public:
             pick_center();
             center_history.push_back(centers);
             label_history.push_back(Assign_Labels());
+
+            // 判断是否收敛
             if (r_diff < Tol && a_diff < Tol) {
                 std::cout << "Converged at iteration " << i << std::endl;
                 break;
@@ -135,6 +171,9 @@ public:
         }
     }
 
+    /**
+     * 确定最终聚类中心
+     */
     void pick_center(){
         Eigen::MatrixXd RA = Responsibility + Availability;
         std::vector<std::vector<double>> c;
@@ -159,9 +198,12 @@ public:
         centers = c;
     }
 
+    /**
+     * 为每个样本分配最近的聚类中心标签
+     * @return 标签数组
+     */
     std::vector<int> Assign_Labels() {
         if (indexcenters.empty()) {
-            //std::cerr << "No indexcenters found. Run pick_center() first." << std::endl;
             return {};
         }
 
@@ -187,6 +229,9 @@ public:
         return labels;
     }
 
+    /**
+     * 启动整个 Affinity Propagation 流程
+     */
     void start(){
         Eigen::MatrixXd similarity = distance();
         if(Preference == MEDIAN){
@@ -200,18 +245,8 @@ public:
         update(similarity);
         pick_center();
         labels = Assign_Labels();
-        //std::cout<<"indexcenters"<<std::endl;
-        //for(int i=0; i<indexcenters.size(); i++){
-        //    std::cout<<indexcenters[i]<<"   ";
-        //    std::cout<<X.row(indexcenters[i])<<std::endl;
-        //}
-        //for(int i=0; i<labels.size(); i++){
-        //    std::cout<<X.row(indexcenters[i])<<"   ";
-        //    std::cout<<labels[i]<<std::endl;
-        //    
-        //}
     }
 
 };
 
-#endif
+#endif // AFFINITY_PROPAGATION_H

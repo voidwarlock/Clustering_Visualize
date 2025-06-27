@@ -211,7 +211,7 @@ void MainWindow::handlePointsChanged(const QList<QPointF> &points) {
 
 void MainWindow::onLoadButton_clicked()
 {
-    QString filename = QFileDialog::getOpenFileName(this, tr("Open Data File"), "/mnt/c/Users/sword/Desktop/Visual_Clustering/datas/", tr("Data Files (*.data *.csv)"));
+    QString filename = QFileDialog::getOpenFileName(this, tr("Open Data File"), "../datas/", tr("Data Files (*.data *.csv)"));
     if (!filename.isEmpty()) {
         filePathLineEdit->setText(filename); // 更新 QLineEdit 文本
         numberscale->setText("1");
