@@ -46,9 +46,13 @@ cd Clustering_Visualize
 构建项目：
 
 mkdir build
+
 cd build
+
 cmake ..
+
 make
+
 运行程序：
 
 ./Cluster
@@ -69,6 +73,7 @@ make
 控制区：控制动画演示
 
 基本操作流程
+
 加载数据：
 
 点击"Load"按钮
@@ -129,12 +134,19 @@ text
 
 
 6.支持的聚类算法
+
 算法名称	关键参数	特点
+
 K-means	K值	快速简单，需指定簇数
+
 DBSCAN	ε半径，最小点数	基于密度，可发现任意形状簇
+
 层次聚类	簇数或距离阈值	可生成树状图
+
 谱聚类	簇数	适合非凸分布数据
+
 Affinity Propagation	阻尼系数	自动确定簇数
+
 DPMM	α参数	贝叶斯非参数方法
 
 7.常见问题
@@ -149,6 +161,7 @@ A: 可能是数据范围过大，尝试：
 检查数据文件格式是否正确
 
 Q: 聚类过程卡顿？
+
 A: 对于大数据集或复杂算法(如DPMM)：
 
 减少数据点数量
@@ -175,4 +188,5 @@ A: 对于大数据集或复杂算法(如DPMM)：
 
 
 特别感谢 https://github.com/datumbox/DPMM-Clustering 中对于DPMM的实现，本代码中的DPMM也是仿照它的结构来实现的
+
 特别感谢 Qwen和Deepseek 对于可视化代码和注释的支持
