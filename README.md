@@ -32,13 +32,17 @@ Qt6开发环境
 Eigen数值计算库
 
 安装步骤
+
 安装依赖库：
 
 sudo apt install g++ cmake qt6-base-dev libeigen3-dev
+
 克隆项目仓库：
 
 git clone https://github.com/voidwarlock/Clustering_Visualize
+
 cd Clustering_Visualize
+
 构建项目：
 
 mkdir build
