@@ -34,23 +34,19 @@ Eigen数值计算库
 安装步骤
 安装依赖库：
 
-bash
 sudo apt install g++ cmake qt6-base-dev libeigen3-dev
 克隆项目仓库：
 
-bash
 git clone https://github.com/voidwarlock/Clustering_Visualize
 cd Clustering_Visualize
 构建项目：
 
-bash
 mkdir build
 cd build
 cmake ..
 make
 运行程序：
 
-bash
 ./Cluster
 
 4.使用说明
