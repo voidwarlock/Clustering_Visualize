@@ -169,5 +169,6 @@ A: 对于大数据集或复杂算法(如DPMM)：
 
 本项目采用MIT开源许可证。详细信息请查看LICENSE文件。
 
+
 特别感谢 https://github.com/datumbox/DPMM-Clustering 中对于DPMM的实现，本代码中的DPMM也是仿照它的结构来实现的
 特别感谢 Qwen和Deepseek 对于可视化代码和注释的支持
